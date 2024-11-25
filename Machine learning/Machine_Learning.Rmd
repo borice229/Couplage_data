@@ -17,6 +17,7 @@ library(ggplot2)
 library(tidyr)
 library(tidyverse)
 library(reshape2)
+library(dplyr)
 ```
 
 
@@ -197,40 +198,6 @@ calculate_gradient <- function(N, a, b, c, U0) {
   h_values <- seq(0.001, 0.05, length.out = 10) # Définir une plage de h
   fU <- Generate_output(N, a, b, c, U0)
   
-  # Initialiser les vecteurs de variations
-  total_variation_a <- 0
-  total_variation_b <- 0
-  total_variation_c <- 0
-  
-  for (h in h_values) {
-    variation_a <- (Generate_output(N, a + h, b, c, U0) - fU) / h
-    variation_b <- (Generate_output(N, a, b + h, c, U0) - fU) / h
-    variation_c <- (Generate_output(N, a, b, c + h, U0) - fU) / h
-    
-    total_variation_a <- total_variation_a + variation_a
-    total_variation_b <- total_variation_b + variation_b
-    total_variation_c <- total_variation_c + variation_c
-  }
-  
-  # Calcul de la moyenne des variations
-  variat_a <- round(total_variation_a/ length(h_values) ,2)
-  variat_b <- round(total_variation_b/ length(h_values) ,2)
-  variat_c <- round(total_variation_c/ length(h_values) ,2)
-  
-  # Combiner les résultats en une matrice
-  gradient_f <- cbind(variat_a, variat_b, variat_c, U0)
-  
-  return(gradient_f)
-}
-```
-
-
-
-```{r}
-calculate_gradient <- function(N, a, b, c, U0) {
-  h_values <- seq(0.001, 0.05, length.out = 10) # Définir une plage de h
-  fU <- Generate_output(N, a, b, c, U0)
-  
   # Matrices pour stocker les variations pour chaque h
   variations_a <- matrix(0, nrow = length(fU), ncol = length(h_values))
   variations_b <- matrix(0, nrow = length(fU), ncol = length(h_values))
@@ -256,23 +223,6 @@ calculate_gradient <- function(N, a, b, c, U0) {
 }
 
 ```
-
-
-
-```{r}
-# Exemple d'utilisation
-N <- 3
-a <- 2
-b <- 2
-c <- 1
-U0 <- 1
-
-calculate_gradient(N, a, b, c, U0)
-
-```
-
-
-
 
 
 
@@ -311,18 +261,6 @@ test_calculate_gradient()
 ```
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 ```{r}
 # Calculer la norme du gradient
 calculate_gradient_norm <- function(gradients) {
@@ -335,19 +273,102 @@ calculate_gradient_norm <- function(gradients) {
 
 
 
-```{r}
-calculate_sensitivity_indicateur <- function(gradients) {
-  # Calculer la norme des gradients
-  norms <- calculate_gradient_norm(gradients)
-  
-  # Indicateur relative pour chaque paramètre en utilisant max 
 
-  Indcateur<-median(rowSums(gradients) /(norms+1))
-  # Retourner les sensibilités
-  return(Indcateur)
+```{r}
+test_calculate_gradient_norm <- function() {
+  # Gradients d'entrée pour le test (matrice)
+  gradients <- matrix(
+    c(
+      0.00, 0.00, 0.00, 1,  # Ligne 1
+      1.00, 1.00, 0.00, 1,  # Ligne 2
+      6.03, 3.00, 11.29, 1, # Ligne 3
+      22.20, 7.00, 72.05, 1 # Ligne 4
+    ),
+    ncol = 4,
+    byrow = TRUE
+  )
+  
+  # Résultat attendu (valeurs calculées manuellement)
+  waited <- c(
+    0.00,                     # Norme de la ligne 1
+    sqrt(1.00^2 + 1.00^2),    # Norme de la ligne 2
+    sqrt(6.03^2 + 3.00^2 + 11.29^2), # Norme de la ligne 3
+    sqrt(22.20^2 + 7.00^2 + 72.05^2) # Norme de la ligne 4
+  )
+  
+  # Résultat obtenu
+  fun_out <- calculate_gradient_norm(gradients)
+  
+  # Comparaison des résultats
+  if (all.equal(waited, fun_out, tolerance = 1e-2)) {
+    return("OK")
+  } else {
+    return("Error...")
+  }
 }
+
+# Exécuter le test
+test_calculate_gradient_norm()
+
 ```
 
+
+```{r}
+calculate_sensitivity_indicateur <- function(gradients) {
+  # Vérifier si la matrice des gradients est valide
+  if (is.null(gradients) || nrow(gradients) == 0 || ncol(gradients) < 3) {
+    stop("La matrice des gradients doit contenir au moins 3 colonnes et une ou plusieurs lignes.")
+  }
+  
+  # Calculer la norme des gradients pour chaque ligne
+  norms <- calculate_gradient_norm(gradients)
+  
+  # Éviter les divisions par zéro en ajoutant une petite valeur epsilon
+  epsilon <- 1e-6
+  sensitivity_values <- rowSums(gradients[, 1:3]) / (norms + epsilon)
+  
+  # Calculer l'indicateur global en prenant la médiane des sensibilités
+  median_indicator <- round(median(sensitivity_values, na.rm = TRUE), 2)
+  
+  return(median_indicator)
+}
+
+
+```
+
+
+
+```{r}
+test_calculate_sensitivity_indicateur <- function() {
+  # Définir un exemple de gradients (entrée)
+  test_gradients <- matrix(c(
+    1, 2, 3,   # Ligne 1
+    4, 5, 6,   # Ligne 2
+    7, 8, 9    # Ligne 3
+  ), ncol = 3, byrow = TRUE)
+  
+  # Résultat attendu pour cet exemple
+  # Normes : sqrt(1^2 + 2^2 + 3^2), sqrt(4^2 + 5^2 + 6^2), sqrt(7^2 + 8^2 + 9^2)
+  # Sensibilités relatives : rowSums(gradients) / norms
+  # Indicateur : médiane des sensibilités relatives
+  expected_indicator <- round(median(c(
+    sum(c(1, 2, 3)) / sqrt(sum(c(1, 2, 3)^2)), # Ligne 1
+    sum(c(4, 5, 6)) / sqrt(sum(c(4, 5, 6)^2)), # Ligne 2
+    sum(c(7, 8, 9)) / sqrt(sum(c(7, 8, 9)^2))  # Ligne 3
+  )), 2)
+  
+  # Appeler la fonction avec l'entrée
+  result_indicator <- calculate_sensitivity_indicateur(test_gradients)
+  
+  # Vérifier le résultat
+  if (all.equal(result_indicator, expected_indicator, tolerance = 1e-2)) {
+    return("OK")
+  } else {
+    return(paste("Test Échec: Attendu =", expected_indicator, "Obtenu =", result_indicator))
+  }
+}
+test_calculate_sensitivity_indicateur()
+```
 
 
 Stock des Indicateur
@@ -398,192 +419,35 @@ get_sensibility <- function(stock) {
 ```
 
 
-__les Fonctions test__
-
-
-```{r}
-test_calculate_gradient <- function() {
-  N <- 2
-  a <- 2
-  b <- 2
-  c <- 1
-  U0 <- 1
-  
-  expected <- matrix(c(2.00, 0.00, 0.00, 1), nrow = 1) # Exemple de résultat attendu
-  result <- calculate_gradient(N, a, b, c, U0)
-  
-  if (all.equal(result, expected)) {
-    return("calculate_gradient: OK")
-  } else {
-    return("calculate_gradient: Error")
-  }
-}
-test_calculate_gradient()
-
-```
-calculate_gradient <- function(N, a, b, c, U0)
-```{r}
-test_Generate_output <- function(){
- a <- 2
- b <- 2
- c <- 1
- U0 <- 1
- N <- 2
- waited<-c(2,2,2,1,1,4,10)
- fun_out<-c(N,a,b,c,Generate_output(N,a,b,c,U0))
- if(all(waited==fun_out)){
-   return("OK")
- }else{
-   return("Error...")
-   }
-}
-test_Generate_output()
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-```{r}
-test_calculate_gradient_norm <- function() {
-  gradients <- matrix(c(2.00, 0.00, 0.00, 1), nrow = 1) # Exemple d'entrée
-  expected <- c(2.00) # Résultat attendu pour la norme
-  
-  result <- calculate_gradient_norm(gradients)
-  
-  if (all.equal(result, expected)) {
-    return("calculate_gradient_norm: OK")
-  } else {
-    return("calculate_gradient_norm: Error")
-  }
-}
-
-test_calculate_gradient_norm()
-
-```
-
-
-```{r}
-test_calculate_sensitivity_indicateur <- function() {
-  gradients <- matrix(c(2.00, 0.00, 0.00, 1), nrow = 1) # Exemple d'entrée
-  expected <- 1.00 # Résultat attendu pour l'indicateur
-  
-  result <- calculate_sensitivity_indicateur(gradients)
-  
-  if (all.equal(result, expected)) {
-    return("calculate_sensitivity_indicateur: OK")
-  } else {
-    return("calculate_sensitivity_indicateur: Error")
-  }
-}
-
-test_calculate_sensitivity_indicateur()
-
-```
-
-
-
-```{r}
-test_Stock_sensitivity_params <- function() {
-  N <- 2
-  param_list <- list(
-    list(a = 2, b = 2, c = 1, U0 = 1),
-    list(a = 3, b = 2, c = 1, U0 = 1)
-  )
-  
-  expected <- data.frame(
-    a = c(2, 3),
-    b = c(2, 2),
-    c = c(1, 1),
-    U0 = c(1, 1),
-    Indicator = c(1.00, 1.00) # Exemple de valeurs attendues
-  )
-  
-  result <- Stock_sensitivity_params(param_list, N)
-  
-  if (all.equal(result, expected)) {
-    return("Stock_sensitivity_params: OK")
-  } else {
-    return("Stock_sensitivity_params: Error")
-  }
-}
-
-test_Stock_sensitivity_params()
-
-```
-
-
-
 ```{r}
 test_get_sensibility <- function() {
+  # Créer un dataframe de test avec des valeurs prédéfinies
   stock <- data.frame(
-    a = c(2, 3, 4),
-    b = c(2, 3, 4),
-    c = c(1, 1, 1),
-    U0 = c(1, 1, 1),
-    Indicator = c(1.00, 2.00, 3.00)
+    a = c(1, 2, 3, 4, 5),
+    b = c(10, 15, 20, 25, 30),
+    c = c(0.5, 1, 1.5, 2, 2.5),
+    U0 = c(1, 2, 3, 4, 5),
+    Indicator = c(2, 7, 12, 3, 9)  # Valeurs arbitraires
   )
   
-  expected <- data.frame(
-    a = 3,
-    b = 3,
-    c = 1,
-    U0 = 1,
-    Indicator = 2.00
-  )
+  # Résultat attendu : médiane = 7, la ligne la plus proche de 7 est la 2ème (Indice 2)
+  expected_result <- stock[2, ]
   
+  # Appeler la fonction get_sensibility
   result <- get_sensibility(stock)
   
-  if (all.equal(result, expected)) {
-    return("get_sensibility: OK")
+  # Vérification si le résultat correspond à ce qui est attendu
+  if (all(result == expected_result)) {
+    return("ok")
   } else {
-    return("get_sensibility: Error")
+    return("Erreur : Résultat incorrect")
   }
 }
 
+# Exécution du test
 test_get_sensibility()
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 ```{r}
@@ -632,8 +496,8 @@ set.seed(123) # Pour des résultats reproductibles
 n <- 50 # Nombre de simulations souhaité
 
 # Simulation à partir des lois normales
-sim_a <- rnorm(n, mean = 3, sd = 0.5)
-sim_b <- rnorm(n, mean = 4, sd = 0.4)
+sim_a <- rnorm(n, mean = 3, sd = 0.2)
+sim_b <- rnorm(n, mean = 4, sd = 0.3)
 sim_c <- rnorm(n, mean = 0.6, sd = 0.05)
 
 sim_U0 <- round(runif(5, min = 1, max = 10),0)
@@ -646,6 +510,7 @@ hist(sim_b, main = "Histogramme de b", xlab = "b", col = "lightgreen", breaks = 
 hist(sim_c, main = "Histogramme de c", xlab = "c", col = "lightcoral", breaks = 30)
 
 ```
+
 
 
 __Exercise 3.1 The notion of noisy data__
@@ -665,18 +530,18 @@ Le composant aléatoire, c'est-à-dire le bruit, peut souvent être modélisé p
 
 __Exercise 3.2 Generation of a learning database__
 
-
 ```{r}
 # Simulation des paramètres pour n individus
 set.seed(123)  # Pour la reproductibilité
 M <- 100  # Nombre d'individus
 N <- 40  # Nombre d'itérations
 
+# Simulation des paramètres a, b, c, et U0
+sim_a <- round(rnorm(M, mean = 3, sd = 0.2), 2)  # Simulation des paramètres a
+sim_b <- round(rnorm(M, mean = 4, sd = 0.3), 2)  # Simulation des paramètres b
+sim_c <- round(rnorm(M, mean = 0.6, sd = 0.05), 2)  # Simulation des paramètres c
+sim_Uo <- round(runif(M, min = 1, max = 10), 2)  # Simulation des valeurs initiales de U0
 
-sim_a <- round(rnorm(M, mean = 2, sd = 0.5),2)  # Simulation des paramètres a
-sim_b <- round(rnorm(M, mean = 3, sd = 0.4),2)  # Simulation des paramètres b
-sim_c <- round(rnorm(M, mean = 0.6, sd = 0.09),2)  # Simulation des paramètres c
-sim_Uo<-round(runif(M,min=1,max=10),2)
 # Générer une base de données avec les valeurs de a, b, c et U[0], U[1], ..., U[N]
 base_root <- data.frame(matrix(ncol = N + 4, nrow = M))  # Base vide (n lignes, N+4 colonnes)
 
@@ -689,10 +554,15 @@ for (i in 1:M) {
   base_root[i, 2] <- sim_b[i]  # Valeur de b
   base_root[i, 3] <- sim_c[i]  # Valeur de c
   base_root[i, 4] <- sim_Uo[i]  # Valeur de Uo
-  U_values <- round(Generate_output(N, sim_a[i], sim_b[i], sim_c[i], sim_Uo[i]),2) #  
-  base_root[i, 4:(N + 4)] <- U_values  # 
+  
+  # Calculer les valeurs de U à l'aide de la fonction Generate_output (assurez-vous qu'elle est définie)
+  U_values <- round(Generate_output(N, sim_a[i], sim_b[i], sim_c[i], sim_Uo[i]), 2)
+  
+  # Ajouter les valeurs de U dans la base
+  base_root[i, 4:(N + 4)] <- U_values
 }
 
+# Restructurer les données pour le graphique
 base_root %>%
   mutate(Individu = 1:M) %>%               # Ajouter la colonne 'Individu'
   melt(id.vars = c("a", "b", "c", "Individu"), 
@@ -700,14 +570,17 @@ base_root %>%
        value.name = "U") %>%                # Restructurer le dataframe
   mutate(Iteration = as.numeric(gsub("U", "", Iteration))) %>%  # Convertir la colonne 'Iteration' en numérique
   ggplot(aes(x = Iteration, y = U, color = factor(Individu))) + # Graphique ggplot
-  geom_line(size = 1) +                     # Tracer les courbes pour chaque individu
+  geom_line(linewidth = 1) +                     # Remplacer 'size' par 'linewidth'
   labs(title = "Évolution de U[n] pour chaque individu",
        x = "Itération (N)", 
        y = "Valeur de U[N]",
        color = "Individu") +
-  theme_minimal()    
+  theme_minimal()
 
 ```
+
+
+
 
 
 
@@ -725,7 +598,6 @@ Generate_output_with_noise <- function(N, a, b, c, U0) {
   return(U)
 }
 
-
 # Générer une base de données avec les valeurs de a, b, c et U[0], U[1], ..., U[100]
 base_brutee <- data.frame(matrix(ncol = N + 4, nrow = M))  # Base vide (n lignes, N+4 colonnes)
 
@@ -738,8 +610,8 @@ for (i in 1:M) {
   base_brutee[i, 2] <- sim_b[i]  # Valeur de b
   base_brutee[i, 3] <- sim_c[i]  # Valeur de c
   base_brutee[i, 4] <- sim_Uo[i]  # Valeur de Uo
-  U_values_bruité <- Generate_output_with_noise(N, sim_a[i], sim_b[i], sim_c[i], sim_Uo[i])  # Générer U[0] à U[100] bruité  
-  base_brutee[i, 4:(N + 4)] <- U_values_bruité  # Remplir les colonnes U[0] à U[100]
+  U_values_bruité <- Generate_output_with_noise(N, sim_a[i], sim_b[i], sim_c[i], sim_Uo[i])  # Générer   
+  base_brutee[i, 4:(N + 4)] <- round(U_values_bruité,2)  # Remplir les colonnes U[0] à U[100]
 }
 
 base_brutee %>%
@@ -758,12 +630,6 @@ base_brutee %>%
 
 ```
 
-
-
-
-```{r}
-#Main_Learning_Base <-round(rbind(base_brutee[, 4:(N + 4)],Output_Curves[, 4:(N + 4)]),2)
-```
 
 
 ```{r}
