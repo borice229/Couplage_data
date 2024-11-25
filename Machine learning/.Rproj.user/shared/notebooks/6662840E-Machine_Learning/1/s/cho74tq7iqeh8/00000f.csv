@@ -1,0 +1,4 @@
+"0","# Fonction de différence relative"
+"0","RelDiff <- function(y_observe, y_pred) {"
+"0","  return(mean(abs((y_observe - y_pred) / y_observe)))"
+"0","}"

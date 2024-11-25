@@ -1,0 +1,5 @@
+"0","# Générer et tracer la courbe 4"
+"0","plot(0:N, Generate_output(N, a4, b4, c4, U0),"
+"0","     type = ""o"", col = 1, ylim = c(0, 15), "
+"0","     xlab = ""n"", ylab = ""U_n"", "
+"0","     main = ""Courbe de a=4, b=2, c=0.3"")"

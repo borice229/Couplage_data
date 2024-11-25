@@ -1,0 +1,3 @@
+"0","output_with_brute<-Main_Learning_Base %>%"
+"0","  mutate(ID_p=paste0(""IND"", 1:M),ID_wb=paste0(""OUTWB"", 1:M)) %>%"
+"0","  select(ID_wb,ID_p,everything())"

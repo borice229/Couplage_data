@@ -1,0 +1,3 @@
+"0","output_brute<-Output_Curves %>%"
+"0","  mutate(ID_p=paste0(""IND"", 1:M),ID_ob=paste0(""OUTB"", 1:M)) %>%"
+"0","  select(ID_ob,ID_p,everything())"

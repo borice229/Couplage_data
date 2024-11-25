@@ -1,0 +1,8 @@
+"0","# Générer les valeurs des paramètres à partir des intervalles"
+"0","a_values <- seq(from = 2, to = 5, length.out = 5)"
+"0","b_values <- seq(from = 1, to = 5, length.out = 5)"
+"0","c_values <- seq(from = 0.1, to = 0.9, length.out = 5)"
+"0","U0_valeus<-seq(from = 1, to = 5, length.out = 5)"
+"0","# Créer une grille de combinaisons possibles des paramètres"
+"0","param_grid <- expand.grid(a = a_values, b = b_values, c = c_values, U0=U0_valeus)"
+"0","param_grid"
