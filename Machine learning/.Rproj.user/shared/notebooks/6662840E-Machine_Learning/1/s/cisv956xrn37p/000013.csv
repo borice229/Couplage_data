@@ -1,7 +1,0 @@
-"0","RelDiff <- function(a,b,c) {"
-"0","  ligne<-base_brutee[base_brutee$a == a & base_brutee$b == b & base_brutee$c == c, ]"
-"0","  y_pred<-as.numeric(ligne[5:length(ligne)])"
-"0","  y_obs<-Generate_output(length(ligne)-4,a,b,c,ligne[[4]])"
-"0","  y_observe<-y_obs[2:length(y_obs)]"
-"0","  return(mean(abs((y_observe - y_pred) / y_observe)))"
-"0","}"

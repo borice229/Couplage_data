@@ -169,6 +169,8 @@ epanechnikov2 <- function(x)
   (((3/4)*(1-x^2))*(abs(x)<=1))^2
 }
 
+#tau
+
 tau_g<-as.numeric(integrate(gauss2,-Inf,Inf)[1])
 tau_g
 tau_t<-as.numeric(integrate(triangle2,-Inf,Inf)[1])
@@ -178,9 +180,116 @@ tau_r
 tau_e<-as.numeric(integrate(epanechnikov2,-Inf,Inf)[1])
 tau_e
 
+# Estimateur de la densité de x 
+dens <- function(x,X,h,noy="G") 
+{
+  n <- length(data$x)
+  if (noy=="G")
+    noyau=gauss
+  if (noy=="R")
+    noyau=rectangle
+  if (noy=="T")
+    noyau=triangle
+  dXh <- (x-X)/h
+  num <- sum( noyau(dXh))
+  res <- num/(n*h)
+  return(res) 
+} 
+
+
+# Estimateur de la variance conditionnelle var(Y/X=x) 
+varcond <- function(x,X,Y,h,noy="G") 
+{
+  n <- length(data$x)
+  if (noy=="G")
+    noyau=gauss
+  if (noy=="R")
+    noyau=rectangle
+  if (noy=="T")
+    noyau=triangle
+  dXh <- (x-X)/h
+  num <- sum( noyau(dXh)*(Y-NW(x,X,Y,h,noy))^2)
+  res <- num/dens(x,X,h,noy)
+  return(res) 
+} 
+
+
 # Intervalle de confiance assymptoptique
 
-NW()
+# Niveau de confiance
+
+h <- 0.01
+resu3 <- NULL
+for(i in 1: n) 
+{ 
+  print(i) 
+  resu3[i] = NW(data$x[i],data$x,data$y,h) 
+} 
+lines(data$x,resu3,col="pink") 
+
+Mat <- cbind(data$x,data$y,resu1,resu2,resu3)
+
+h<-0.01
+n<-1000
+noy<-"G"
+alpha <- 0.05
+z_alpha <- qnorm(1 - alpha / 2)
+IC_lower<-NULL
+IC_upper<- NULL
+estNW<-NULL
+sigma2<-NULL
+erreur_standard<-NULL
+for(i in 1: n) 
+{ 
+sigma2[i]<- (varcond(data$x[i],data$x,data$y,h,noy=noy)*tau_g^2)/dens(data$x[i],data$x,h,noy=noy)
+erreur_standard[i]<- sqrt(sigma2[i]/n*h)
+estNW[i]<- NW(data$x[i],data$x,data$y,h,noy)
+IC_lower[i] <- estNW[i] - z_alpha * erreur_standard[i]
+IC_upper[i] <- estNW[i] + z_alpha * erreur_standard[i]
+}
+MatInt <- cbind(data$x,data$y,estNW,IC_lower,IC_upper)
+colnames(MatInt) <- c("x", "y", "estimationNW", "IC_lower", "IC_upper")
+
+library(ggplot2)
+
+# Supposons que MatInt est déjà défini avec les bonnes colonnes
+colnames(MatInt) <- c("x", "y", "estimation", "IC_lower", "IC_upper")
+
+# Convertir la matrice MatInt en DataFrame pour ggplot2
+MatInt_df <- as.data.frame(MatInt)
+
+# Tracer
+ggplot(MatInt_df, aes(x = x)) +
+  # Nuages de points (x, y)
+  geom_point(aes(y = y, color = "Observations"), size = 2) +
+  # Courbe pour l'estimateur
+  geom_line(aes(y = estimation, color = "Estimateur"), size = 1) +
+  # Ruban pour les intervalles de confiance
+  geom_ribbon(aes(ymin = IC_lower, ymax = IC_upper, fill = "Intervalle de confiance"), alpha = 0.3) +
+  # Courbes pour IC_lower et IC_upper
+  geom_line(aes(y = IC_lower, color = "IC_lower"), linetype = "dashed", size = 0.8) +
+  geom_line(aes(y = IC_upper, color = "IC_upper"), linetype = "dashed", size = 0.8) +
+  # Labels et thème
+  labs(
+    title = "Estimateur avec Intervalle de Confiance et Observations",
+    x = "x",
+    y = "Valeur"
+  ) +
+  # Personnalisation des couleurs et de la légende
+  scale_color_manual(
+    name = "Légende",
+    values = c(
+      "Observations" = "blue",
+      "Estimateur" = "red",
+      "IC_lower" = "green",
+      "IC_upper" = "purple"
+    )
+  ) +
+  scale_fill_manual(
+    name = "Intervalle",
+    values = c("Intervalle de confiance" = "gray")
+  ) +
+  theme_minimal()
 
 
 

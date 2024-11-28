@@ -124,6 +124,5 @@ new_data_V6<- read.table("DBH.txt") %>%
   filter(V1==6) %>% 
   rename(ind=V1,temp=V2,Ecart=V3)
 
-plot(new_data_V6$Ecart)
 
 
