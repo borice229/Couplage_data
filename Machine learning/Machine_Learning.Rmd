@@ -18,6 +18,9 @@ library(tidyr)
 library(tidyverse)
 library(reshape2)
 library(dplyr)
+library(DBI)
+library(RMySQL)
+library(jsonlite)
 ```
 
 
@@ -581,23 +584,7 @@ base_root %>%
 
 
 
-
-
-
 ```{r}
-# Définition de la fonction avec ajout de bruit
-Generate_output_with_noise <- function(N, a, b, c, U0) {
-  U <- numeric(N + 1)
-  U[1] <- U0
-  
-  for (n in 1:N) {
-    # Calcul de U[n+1] avec ajout de bruit gaussien
-    U[n + 1] <- a * U[n]^c + b + rnorm(1, mean = 0, sd = 1)
-  }
-  
-  return(U)
-}
-
 # Générer une base de données avec les valeurs de a, b, c et U[0], U[1], ..., U[100]
 base_brutee <- data.frame(matrix(ncol = N + 4, nrow = M))  # Base vide (n lignes, N+4 colonnes)
 
@@ -610,7 +597,7 @@ for (i in 1:M) {
   base_brutee[i, 2] <- sim_b[i]  # Valeur de b
   base_brutee[i, 3] <- sim_c[i]  # Valeur de c
   base_brutee[i, 4] <- sim_Uo[i]  # Valeur de Uo
-  U_values_bruité <- Generate_output_with_noise(N, sim_a[i], sim_b[i], sim_c[i], sim_Uo[i])  # Générer   
+  U_values_bruité <- Generate_output(N, sim_a[i], sim_b[i], sim_c[i], sim_Uo[i]) + rnorm(N+1, mean = 0, sd = 1) # Générer   
   base_brutee[i, 4:(N + 4)] <- round(U_values_bruité,2)  # Remplir les colonnes U[0] à U[100]
 }
 
@@ -627,41 +614,219 @@ base_brutee %>%
        y = "Valeur de U[N]",
        color = "Individu") +
   theme_minimal()    
+```
+
+
+
+```{r}
+# Nombre de simulations
+M <- 100 # Ajustez ce nombre selon vos besoins
+N <- 40   # Nombre d'itérations pour Generate_output
+
+# Simulation des paramètres
+sim_a <- round(rnorm(M, mean = 3, sd = 0.2), 2)  # Simulation des paramètres a
+sim_b <- round(rnorm(M, mean = 4, sd = 0.3), 2)  # Simulation des paramètres b
+sim_c <- round(rnorm(M, mean = 0.6, sd = 0.05), 2)  # Simulation des paramètres c
+sim_U0 <- round(runif(M, min = 1, max = 10), 2)  # Simulation des valeurs initiales de U0
+
+
+# Génération des résultats et création de la DataFrame
+Output_Curves <- data.frame(
+  a = sim_a,
+  b = sim_b,
+  c = sim_c,
+  U0 = sim_U0
+)
+
+# Calcul des sorties Un et ajout comme une colonne
+Output_Curves$Un <- lapply(1:nrow(Output_Curves), function(i) {
+  Generate_output(N, Output_Curves$a[i], Output_Curves$b[i], Output_Curves$c[i], Output_Curves$U0[i])
+})
+
+
+# Affichage de la DataFrame
+head(Output_Curves)
 
 ```
 
 
 
 ```{r}
-set.seed(123)  # Pour la reproductibilité
-Output_Curves<-base_root[, 5:(N + 4)]
-matrice_bruit_aleatoire <- matrix(rnorm(M * N), nrow = M, ncol = N)
-Main_Learning_Base<-Output_Curves+matrice_bruit_aleatoire
+# Nombre de simulations
+M <- 100 # Ajustez ce nombre selon vos besoins
+N <- 40   # Nombre d'itérations pour Generate_output
+
+# Simulation des paramètres
+sim_a <- round(rnorm(M, mean = 3, sd = 0.2), 2)  # Simulation des paramètres a
+sim_b <- round(rnorm(M, mean = 4, sd = 0.3), 2)  # Simulation des paramètres b
+sim_c <- round(rnorm(M, mean = 0.6, sd = 0.05), 2)  # Simulation des paramètres c
+sim_U0 <- round(runif(M, min = 1, max = 10), 2)  # Simulation des valeurs initiales de U0
+
+
+# Génération des résultats et création de la DataFrame
+Main_Learning_Base <- data.frame(
+  a = sim_a,
+  b = sim_b,
+  c = sim_c,
+  U0 = sim_U0
+)
+
+# Calcul des sorties Un et ajout comme une colonne
+# Calcul des sorties Un et ajout comme une colonne
+Main_Learning_Base$Un <- lapply(1:nrow(Main_Learning_Base), function(i) {
+  Generate_output(N, Main_Learning_Base$a[i], Main_Learning_Base$b[i], Main_Learning_Base$c[i], Main_Learning_Base$U0[i]) + rnorm(N+1,mean=0,sd=1)
+})
+
+
+# Affichage de la DataFrame
+head(Main_Learning_Base)
 ```
 
+
 # Build SQL Base
+
+
+```{r}
+# Établir la connexion
+con <- dbConnect(RMySQL::MySQL(), 
+                 dbname = "Mlearn",  # Nom de la base de données
+                 host = "127.0.0.1",    # Adresse locale du serveur MySQL
+                 port = 3306,           # Port par défaut pour MySQL
+                 user = "root",         # Nom d'utilisateur
+                 password = "less@intsARS19") # Mot de passe réel
+
+# Vérification de la connexion
+if (!is.null(con)) {
+  cat("Connexion réussie à la base de données 'mlearning' !\n")
+} else {
+  cat("Erreur lors de la connexion.\n")
+}
+
+```
+
+
 
 # table des paramètres
 
 ```{r}
-param<-base_root[, 1:4] %>% 
-  mutate(ID=paste0("IND", 1:M)) %>% 
-  select(ID,a,b,c,U0)
+param<-Main_Learning_Base[, 1:4]
 ```
 
-# Table donne avec bruit
+
 ```{r}
-output_with_brute<-Main_Learning_Base %>%
-  mutate(ID_p=paste0("IND", 1:M),ID_wb=paste0("OUTWB", 1:M)) %>%
-  select(ID_wb,ID_p,everything())
+# Créer la table Parameters
+dbExecute(con, "
+  CREATE TABLE IF NOT EXISTS Parameters (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    a FLOAT NOT NULL,
+    b FLOAT NOT NULL,
+    c FLOAT NOT NULL,
+    U0 FLOAT NOT NULL
+    
+  )
+")
+
+```
+__Créer la table NormalData__
+
+```{r}
+# Créer la table NormalData avec l'ID comme clé primaire et la clé étrangère pour parameter_id
+dbExecute(con, "
+  CREATE TABLE IF NOT EXISTS NormalData (
+    id INT AUTO_INCREMENT PRIMARY KEY,  -- Définir id comme clé primaire
+    parameter_id INT NOT NULL,          -- Clé étrangère
+    Un JSON NOT NULL,                   -- Colonne JSON pour stocker Un
+    FOREIGN KEY (parameter_id) REFERENCES Parameters(id) ON DELETE CASCADE  -- Référence à Parameters
+  )
+")
+
+
 ```
 
-# Table donne sans bruit
+__Créer la table NoiseData__
+
 ```{r}
-output_brute<-Output_Curves %>%
-  mutate(ID_p=paste0("IND", 1:M),ID_ob=paste0("OUTB", 1:M)) %>%
-  select(ID_ob,ID_p,everything())
+# Créer la table NoiseData
+dbExecute(con, "
+  CREATE TABLE IF NOT EXISTS NoiseData (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    parameter_id INT NOT NULL,
+    Un JSON NOT NULL,
+    FOREIGN KEY (parameter_id) REFERENCES Parameters(id) ON DELETE CASCADE
+  )
+")
+
+
 ```
+
+
+```{r}
+# Désactiver les contraintes de clé étrangère
+dbExecute(con, "SET foreign_key_checks = 0")
+
+# Vider la table Parameters
+dbExecute(con, "TRUNCATE TABLE Parameters")
+
+# Réactiver les contraintes de clé étrangère
+dbExecute(con, "SET foreign_key_checks = 1")
+
+
+```
+__Charger les données de la table Parameters__
+```{r}
+# Préparer les données à insérer, en excluant l'`id`
+for (i in 1:nrow(param)) {
+  query <- sprintf("INSERT INTO Parameters (a, b, c, U0) VALUES (%f, %f, %f, %f)",
+                   param$a[i], param$b[i], param$c[i], param$U0[i])
+  dbExecute(con, query)
+}
+
+```
+
+__Charger les données de la table Output_Curves __
+```{r}
+# Créer la colonne 'parameter_id' qui contient des valeurs de 1 à N
+Output_Curves$parameter_id <- 1:nrow(Output_Curves)
+
+# Préparer les données à insérer dans la table NormalData
+for (i in 1:nrow(Output_Curves)) {
+  # Convertir la colonne Un en chaîne JSON
+  Un_json <- toJSON(Output_Curves$Un[[i]], auto_unbox = TRUE)  # auto_unbox pour convertir en un tableau JSON correct
+  
+  # Construire la requête SQL
+  query <- sprintf("INSERT INTO NormalData (parameter_id, Un) VALUES (%d, '%s')",
+                   Output_Curves$parameter_id[i], Un_json)  # '%s' pour insérer la chaîne JSON
+
+  # Exécuter la requête d'insertion
+  dbExecute(con, query)
+}
+
+```
+
+
+
+__Charger les données de la table Main_Learning_Base __
+```{r}
+# Créer la colonne 'parameter_id' qui contient des valeurs de 1 à N
+Main_Learning_Base$parameter_id <- 1:nrow(Main_Learning_Base)
+
+# Préparer les données à insérer dans la table NormalData
+for (i in 1:nrow(Main_Learning_Base)) {
+  # Convertir la colonne Un en chaîne JSON
+  Un_j <- toJSON(Main_Learning_Base$Un[[i]], auto_unbox = TRUE)  # auto_unbox pour convertir en un tableau JSON correct
+  
+  # Construire la requête SQL
+  query <- sprintf("INSERT INTO NoiseData (parameter_id, Un) VALUES (%d, '%s')",
+                   Main_Learning_Base$parameter_id[i], Un_j)  # '%s' pour insérer la chaîne JSON
+
+  # Exécuter la requête d'insertion
+  dbExecute(con, query)
+}
+```
+
+
+
+
 
 
 
