@@ -21,6 +21,8 @@ library(dplyr)
 library(DBI)
 library(RMySQL)
 library(jsonlite)
+library(nloptr)
+library(nnet)
 ```
 
 
@@ -891,6 +893,16 @@ for (u0 in Uo) {
 ```
 
 
+### 7. Algorithme DIRECT
+
+L'algorithme **DIRECT** (DIviding RECTangles) est une méthode d'optimisation globale utilisée pour trouver les valeurs optimales de paramètres dans un espace multidimensionnel sans nécessiter de dérivées. Il fonctionne en divisant systématiquement l'espace de recherche en sous-espaces (rectangles) et en évaluant leur potentiel à contenir une solution optimale. L'algorithme privilégie l'exploration des régions prometteuses et abandonne celles qui sont moins susceptibles de donner de bons résultats.
+
+### 8. Utilisation de DIRECT pour ajuster les paramètres \(a\), \(b\) et \(c\)
+
+L'algorithme DIRECT est utilisé pour ajuster les paramètres \(a\), \(b\) et \(c\) afin de minimiser l'écart entre les valeurs observées et prédites par un modèle. L'approche consiste à explorer l'espace des paramètres en cherchant les valeurs qui minimisent l'erreur, en utilisant la fonction `f_obj` pour calculer cet écart. Le processus d'optimisation vise à ajuster ces paramètres pour améliorer la précision du modèle.
+
+
+
 
 ```{r}
 RelDiff <- function(y_observe, y_pred) {
@@ -899,61 +911,789 @@ RelDiff <- function(y_observe, y_pred) {
 ```
 
 
+```{r}
+test_RelDiff <- function() {
+  # Définir des valeurs d'observation et prédites
+  y_observe <- matrix(c(1, 2, 3, 4), nrow = 2, byrow = TRUE)  
+  y_pred <- matrix(c(1, 2.5, 3, 4.5), nrow = 2, byrow = TRUE)
+  
+  # Résultat attendu : moyenne des différences absolues
+  waited <- c(0.25, 0.25)  
+
+  # Appel de la fonction RelDiff
+  fun_out <- RelDiff(y_observe, y_pred)
+
+  # Comparer les résultats attendus avec ceux obtenus
+  if(all(waited==fun_out)){
+   return("OK")
+ }else{
+   return("Error...")
+   }
+}
+
+# Appel de la fonction de test
+test_RelDiff()
+
+```
+
+
+
+```{r}
+f_obj <- function(A, B, C) {
+  # Filtrer les lignes de la base principale
+  filtered_row <- subset(Main_Training_Base, a == A & b == B & c == C)
+  
+  if (nrow(filtered_row) == 0) {
+    return(paste0('les paramètres renseignés ne sont pas dans la base')) # Retourner une valeur élevée si aucun filtre ne correspond
+  }
+  y_obser <- do.call(rbind, lapply(filtered_row$Un, function(x) unlist(x)))
+  # Déterminer N comme la longueur totale de `y_obser`
+  N<- ncol(y_obser)-1
+  
+  # Générer les prédictions
+  y_pred <- t(mapply(Generate_output, N, A, B, C, filtered_row[, 4]))
+  
+  # Calculer l'écart
+  ecart <- RelDiff(y_obser, y_pred)
+  
+  return(ecart)
+}
+
+```
+
+
+```{r}
+test_f_obj <- function() {
+  # Définir les valeurs des paramètres pour le test
+  A <- 3.09
+  B <- 4.43
+  C <- 0.70
+  
+  # Résultat attendu pour ces paramètres
+  waited <- 0.8520035
+  
+  # Appeler la fonction f_obj avec les paramètres donnés
+  fun_out <- f_obj(A, B, C)
+  
+  # Comparer le résultat de la fonction avec le résultat attendu
+  if (all.equal(fun_out, waited, tolerance = 1e-6)) {
+    return("OK")
+  } else {
+    return("Error...")
+  }
+}
+
+# Appeler la fonction de test
+test_f_obj()
+
+```
+
+
+```{r}
+f_obj(3.09,
+4.43,
+2)
+
+```
 
 
 
 
 ```{r}
-f_obj<-function(A,B,C){
-  N<-length(base_brutee)-4
-  filtered_row <- subset(base_brutee, a == A & b == B & c == C)
-  y_obser<-as.matrix(filtered_row[,4:(N+4)])
-  y_pred<-t(mapply(Generate_output,N, A, B, C ,y_obser[,1]))
-  ecart<-RelDiff(y_obser,y_pred)
-  return(ecart)
+#train parameters
+params<-Main_Training_Base[, 1:3]
+```
+
+```{r}
+# Define the objective function to minimize
+objectif <- function(p) {
+  A <- p[1]
+  B <- p[2]
+  C <- p[3]
+  n<-nrow(p)
+  
+  fun <- 0
+  for (i in n ) {
+    fun <- fun + f_obj(A[i,], B[i,], C[i,])
+  }
+  fun
   
 }
+
+# Définir les bornes pour les paramètres a, b, et c
+bornes_inf <- c(min(params$a), min(params$b), min(params$c))  # Bornes inférieures
+bornes_sup <- c(max(params$a), max(params$b), max(params$c))  # Bornes supérieures
+
+# Apply the DIRECT algorithm to optimize the parameters
+resultat <- direct(fn = objectif, lower = bornes_inf, upper = bornes_sup, control = list(print.level = 1))
+
+# Print the results (optimized parameters a, b, c)
+print(resultat$par)  # Optimized values of a, b, and c
+
+```
+
+## Exercise 3.4 Stability of the parameters
+
+```{r}
+#set.seed(123)  # Pour garantir la reproductibilité du tirage
+Sampl_train <- Main_Training_Base[sample(nrow(Main_Training_Base), 50, replace = TRUE), ]
 ```
 
 
 
-
-
 ```{r}
-f_obj(1.72, 2.72, 0.80)
+param_spl<-Sampl_train[,1:3]
+# Définir les bornes pour les paramètres a, b, et c
+bornes_inf_spl <- c(min(param_spl$a), min(param_spl$b), min(param_spl$c))  # Bornes inférieures
+bornes_sup_spl <- c(max(param_spl$a), max(param_spl$b), max(param_spl$c))  # Bornes supérieures
+
+# Apply the DIRECT algorithm to optimize the parameters
+resultat_spl <- direct(fn = objectif, lower = bornes_inf_spl, upper = bornes_sup_spl, control = list(print.level = 1))
+
+# Print the results (optimized parameters a, b, c)
+print(resultat_spl$par)  # Optimized values of a, b, and c
+
 ```
 
+
 ```{r}
-N<-length(base_brutee)-4
-filtered_row <- subset(base_brutee, a == 1.72 & b == 2.72 & c == 0.80)
-y_obser<-as.matrix(filtered_row[,4:(N+4)])
-y_pred<-t(mapply(Generate_output,N, 1.72, 2.72, 0.80 ,y_obser[,1]))
-#ecart<-RelDiff(y_obser,y_pred)
+# Créer un tableau vide pour stocker les résultats des 10 itérations
+results_table <- data.frame(a = numeric(10), b = numeric(10), c = numeric(10))
+
+# Répéter l'opération 10 fois
+for (i in 1:10) {
+  # Tirage aléatoire avec remise de 50 courbes
+  indices <- sample(nrow(Main_Training_Base), 50, replace = TRUE)
+  Newbase_spl <- Main_Training_Base[indices, ]
+  param_sp<-Newbase_spl[,1:3]
+# Définir les bornes pour les paramètres a, b, et c
+  bornes_inf_sp <- c(min(param_sp$a), min(param_sp$b), min(param_sp$c))  # Bornes inférieures
+  bornes_sup_sp <- c(max(param_sp$a), max(param_sp$b), max(param_sp$c))  # Bornes   supérieures
+  # Appliquer l'algorithme DIRECT pour ajuster les paramètres
+  resultat_sp <- direct(fn = objectif, lower = bornes_inf_sp, upper = bornes_sup_sp, control = list(print.level = 0))
+  
+  # Stocker les résultats des paramètres optimisés dans le tableau
+  results_table[i, ] <- round(resultat_sp$par,2)
+}
+
+# Afficher le tableau contenant les valeurs des 10 triplets
+print(results_table)
+
 ```
 
 
 ```{r}
-# Définir les bornes pour les paramètres a, b, et c selon les intervalles spécifiés
-lower_bounds <- c(2, 1, 0.1)  # borne inférieure pour a, b et c
-upper_bounds <- c(5, 5, 0.9)  # borne supérieure pour a, b et c
+# Calcul de la moyenne, de la variance et de l'écart-type relatifs
+moyenne <- colMeans(results_table)
+variance <- apply(results_table, 2, var)
+ecart_type <- sqrt(variance)
 
-# Configurer et exécuter l’optimisation avec l'algorithme DIRECT
-result <- nloptr(
-  x0 = c(3.5, 3, 0.5),  # Valeurs de départ (peuvent être ajustées si besoin)
-  eval_f = f_obj,       # Fonction d’objectif à minimiser
-  lb = lower_bounds,    # Borne inférieure
-  ub = upper_bounds,    # Borne supérieure
-  opts = list("algorithm" = "NLOPT_GN_DIRECT", "maxeval" = 1000)  # Configuration DIRECT
+# Calcul de la variance relative et de l'écart-type relatif
+# Variance relative = variance / (moyenne^2)
+variance_relative <- variance / (moyenne^2)
+
+# Ecart-type relatif = écart-type / moyenne
+ecart_type_relatif <- ecart_type / moyenne
+
+# Afficher les résultats
+resultats_statistiques <- data.frame(
+  Moyenne = round(moyenne,2),
+  Variance_Relative = variance_relative,
+  Ecart_Type_Relatif = round(ecart_type_relatif,2)
 )
 
-# Afficher les résultats optimaux
-print(result)
+print(resultats_statistiques)
+
+```
+
+__Résultats :__
+Les calculs de la **moyenne**, de la **variance relative** et de l'**écart-type relatif** pour les paramètres \(a\), \(b\) et \(c\) ont montré l'instabilité ou la stabilité de chaque paramètre selon les échantillons tirés. Des moyennes proches de la valeur optimale indiquent une bonne estimation, tandis que des valeurs faibles de variance relative et d'écart-type relatif indiquent que les paramètres sont stables et peu sensibles aux variations des données d'entraînement.
+
+__Intérêt de l'approche :__
+Cette approche permet d'évaluer la **robustesse du modèle** en tirant des échantillons avec remise. Elle offre une estimation fiable des paramètres optimisés en tenant compte de la variabilité des données. Les statistiques calculées permettent de mesurer la stabilité des paramètres, et donc la fiabilité du modèle, tout en réduisant les risques de **sur-apprentissage** lié à des fluctuations des données d'entraînement.
+
+
+## Exercise 3.5 Accuracy of the adjuted model
+
+### 1. Choix des indicateurs pour quantifier la qualité de l'ajustement du modèle
+
+J'ai choisi d'utiliser l'**Erreur Absolue Moyenne (MAE)** comme indicateur de la qualité de l'ajustement du modèle. Le MAE est particulièrement adapté car il mesure l'erreur moyenne entre les valeurs réelles et les valeurs prédites. Il est robuste aux valeurs aberrantes et est exprimé dans les mêmes unités que la variable dépendante, ce qui le rend facile à interpréter. Contrairement aux autres indicateurs comme le MSE ou le RMSE, le MAE ne pénalise pas de manière disproportionnée les grandes erreurs, ce qui le rend plus approprié pour une analyse d'ajustement général.
+
+### 2. Calcul de la précision du modèle sur le jeu de données d'entraînement
+
+Le **MAE** sur le jeu de données d'entraînement se calcule à l'aide de la formule suivante :
+
+\[
+MAE_{\text{train}} = \frac{1}{n} \sum_{i=1}^{n} |y_{\text{réel}, i} - y_{\text{prédit}, i}|
+\]
+
+Où :
+- \( y_{\text{réel}, i} \) représente la valeur réelle de l'observation \( i \),
+- \( y_{\text{prédit}, i} \) est la valeur prédite pour l'observation \( i \),
+- \( n \) est le nombre total d'observations dans le jeu de données d'entraînement.
+
+Le **MAE** permet de quantifier l'ajustement du modèle aux données d'entraînement en indiquant la moyenne des erreurs absolues entre les valeurs réelles et prédites. Un **MAE** faible indique une bonne précision du modèle, tandis qu'un **MAE** élevé suggère que les prédictions du modèle sont moins précises.
+
+
+
+# Train Score
+```{r}
+a_dj<-3
+b_dj<-4.18
+c_dj<-0.62
+out_size<-40
+# Fonction pour calculer le MAE pour chaque ligne
+calculate_mae_per_row <- function(y_real_data, y_pred_data) {
+  # Vérifier que les dimensions des matrices correspondent
+  if (nrow(y_real_data) != nrow(y_pred_data)) {
+    stop("Les matrices y_real_data et y_pred_data doivent avoir le même nombre de lignes.")
+  }
+  
+  # Calcul du MAE pour chaque ligne
+  mae_per_row <- apply(cbind(y_real_data, y_pred_data), 1, function(row) {
+    # Extraire la ligne de valeurs réelles et prédites
+    y_real <- row[1:ncol(y_real_data)]
+    y_pred <- row[(ncol(y_real_data) + 1):length(row)]
+    
+    # Calcul de l'erreur absolue pour la ligne
+    mae <- mean(abs(y_real - y_pred))
+    return(mae)
+  })
+  
+  # Calcul de la moyenne des MAE
+  mae_global <- mean(mae_per_row)
+  
+  return(mae_global)
+}
+
+# Exemple d'utilisation
+# Matrices de valeurs réelles et prédites (par exemple 3 observations avec 2 variables)
+y_real_data <- do.call(rbind, lapply(Main_Training_Base$Un, function(x) unlist(x)))
+y_pred_data <- t(mapply( Generate_output ,out_size,a_dj, b_dj ,c_dj, Main_Training_Base$U0))
+
+# Calcul du MAE global
+mae_train <- calculate_mae_per_row(y_real_data, y_pred_data)
+
+# Affichage du résultat
+print(paste("Le MAE train est :", mae_train))
 
 ```
 
 
 
+# test Score
+```{r}
+a_dj<-3
+b_dj<-4.18
+c_dj<-0.62
+out_size<-40
 
+# Exemple d'utilisation
+# Matrices de valeurs réelles et prédites (par exemple 3 observations avec 2 variables)
+y_real_test <- do.call(rbind, lapply(Main_Test_Base$Un, function(x) unlist(x)))
+y_pred_test <- t(mapply( Generate_output ,out_size,a_dj, b_dj ,c_dj, Main_Test_Base$U0))
+
+# Calcul du MAE global
+mae_test <- calculate_mae_per_row(y_real_test, y_pred_test)
+
+# Affichage du résultat
+print(paste("Le MAE test est :", mae_test))
+
+```
+
+
+### Description des résultats
+
+Les valeurs obtenues pour le **MAE** (Erreur Absolue Moyenne) sur les jeux de données d'entraînement et de test sont les suivantes :
+- **MAE train** : 6.22
+- **MAE test** : 6.45
+
+Ces résultats montrent que l'erreur moyenne absolue est légèrement plus élevée sur le jeu de test (6.45) que sur le jeu d'entraînement (6.22). Cela peut indiquer que le modèle est légèrement mieux ajusté aux données d'entraînement qu'aux données de test. L'écart entre ces deux valeurs suggère que le modèle pourrait être légèrement surajusté (overfitting) aux données d'entraînement, bien que l'écart ne soit pas très important. En général, un **MAE** relativement faible pour les deux jeux de données indique que le modèle fournit des prédictions assez précises.
+
+
+## Exercise 3.6 Comparison of different algorithms
+
+
+`
+
+
+
+
+
+
+
+```{r}
+adam <- function(y_observe_list, U0_list, N, learning_rate, max_iter, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8) {
+  # Initialize parameters
+  a <- 0
+  b <- 0
+  c <- 0
+  
+  # Initialize moment estimates
+  m_a <- m_b <- m_c <- 0
+  v_a <- v_b <- v_c <- 0
+  
+  # Initialize bias correction
+  beta1_t <- beta2_t <- 1
+  
+  # Store cost history
+  cost_history <- numeric(max_iter)
+  
+  for (iter in 1:max_iter) {
+    # Generate predictions
+    y_pred_list <- lapply(U0_list, function(U0) Generate_output(N, a, b, c, U0))
+    
+    # Compute the cost
+    cost <- mean(sapply(seq_along(U0_list), function(i) {
+      y_pred <- y_pred_list[[i]]
+      y_observe <- y_observe_list[i, ]
+      sum((y_pred - y_observe)^2) / length(y_observe)
+    }))
+    cost_history[iter] <- cost
+    
+    # Compute gradients
+    grad_a <- mean(sapply(seq_along(U0_list), function(i) {
+      U0 <- U0_list[i]
+      y_pred <- y_pred_list[[i]]
+      y_observe <- y_observe_list[i, ]
+      sum(2 * (y_pred - y_observe) * U0^c) / length(y_observe)
+    }))
+    
+    grad_b <- mean(sapply(seq_along(U0_list), function(i) {
+      y_pred <- y_pred_list[[i]]
+      y_observe <- y_observe_list[i, ]
+      sum(2 * (y_pred - y_observe)) / length(y_observe)
+    }))
+    
+    grad_c <- mean(sapply(seq_along(U0_list), function(i) {
+      U0 <- U0_list[i]
+      y_pred <- y_pred_list[[i]]
+      y_observe <- y_observe_list[i, ]
+      sum(2 * (y_pred - y_observe) * log(U0) * a * U0^c) / length(y_observe)
+    }))
+    
+    # Update moments
+    m_a <- beta1 * m_a + (1 - beta1) * grad_a
+    m_b <- beta1 * m_b + (1 - beta1) * grad_b
+    m_c <- beta1 * m_c + (1 - beta1) * grad_c
+    
+    v_a <- beta2 * v_a + (1 - beta2) * grad_a^2
+    v_b <- beta2 * v_b + (1 - beta2) * grad_b^2
+    v_c <- beta2 * v_c + (1 - beta2) * grad_c^2
+    
+    # Bias correction
+    beta1_t <- beta1_t * beta1
+    beta2_t <- beta2_t * beta2
+    
+    m_a_hat <- m_a / (1 - beta1_t)
+    m_b_hat <- m_b / (1 - beta1_t)
+    m_c_hat <- m_c / (1 - beta1_t)
+    
+    v_a_hat <- v_a / (1 - beta2_t)
+    v_b_hat <- v_b / (1 - beta2_t)
+    v_c_hat <- v_c / (1 - beta2_t)
+    
+    # Update parameters
+    a <- a - learning_rate * m_a_hat / (sqrt(v_a_hat) + epsilon)
+    b <- b - learning_rate * m_b_hat / (sqrt(v_b_hat) + epsilon)
+    c <- c - learning_rate * m_c_hat / (sqrt(v_c_hat) + epsilon)
+    
+    # Print cost every 100 iterations
+    if (iter %% 100 == 0) {
+      cat("Iteration:", iter, " Cost:", cost, "\n")
+    }
+  }
+  
+  return(list(a = a, b = b, c = c, cost_history = cost_history))
+}
+
+# Example usage
+N <- 40
+U0_list <- Main_Training_Base$U0  # List of initial values
+y_observe_list <- do.call(rbind, lapply(Main_Training_Base$Un, function(x) unlist(x)))  # Observations matrix
+learning_rate <- 0.001
+max_iter <- 1000
+
+result <- adam(y_observe_list, U0_list, N, learning_rate, max_iter)
+cat("Final Parameters: a =", result$a, "b =", result$b, "c =", result$c, "\n")
+
+```
+
+
+
+```{r}
+sgd <- function(y_observe_list, U0_list, N, learning_rate, max_iter) {
+  # Initialisation des paramètres
+  a <- 0  # Initialisation dans l'intervalle [2, 5]
+  b <- 0  # Initialisation dans l'intervalle [1, 5]
+  c <- 0  # Initialisation dans l'intervalle [0.1, 0.9]
+  
+  cost_history <- numeric(max_iter)  # Stockage des coûts
+  
+  for (iter in 1:max_iter) {
+    # Sélection d'un exemple aléatoire
+    i <- sample(1:length(U0_list), 1)
+    U0 <- U0_list[[i]]
+    y_observe <- y_observe_list[i, ]
+    
+    # Calculer les prédictions
+    y_pred <- Generate_output(N, a, b, c, U0)
+    
+    # Calcul des gradients
+    grad_a <- sum(2 * (y_pred - y_observe) * U0^c) / length(y_observe)
+    grad_b <- sum(2 * (y_pred - y_observe)) / length(y_observe)
+    grad_c <- sum(2 * (y_pred - y_observe) * log(U0) * a * U0^c) / length(y_observe)
+    
+    # Mise à jour des paramètres avec contraintes
+    a <- max(min(a - learning_rate * grad_a, max(params$a)), min(params$a))
+    b <- max(min(b - learning_rate * grad_b, max(params$b)), min(params$b))
+    c <- max(min(c - learning_rate * grad_c, max(params$c)), min(params$c))
+  
+    # Calcul du coût
+    cost <- sum((y_pred - y_observe)^2) / length(y_observe)
+    cost_history[iter] <- cost
+    
+    # Afficher le coût toutes les 100 itérations
+    if (iter %% 100 == 0) {
+      cat("Iteration:", iter, " Cost:", cost, 
+          " a:", a, " b:", b, " c:", c, "\n")
+    }
+  }
+  
+  return(list(a = a, b = b, c = c, cost_history = cost_history))
+}
+
+
+
+```
+
+
+```{r}
+N <- 40
+U0_list <- Main_Training_Base$U0  # Liste des valeurs initiales
+y_observe_list <- do.call(rbind, lapply(Main_Training_Base$Un, function(x) unlist(x)))  # Matrice des observations
+learning_rate <- 0.001
+max_iter <- 1000
+
+result <- sgd(y_observe_list, U0_list, N, learning_rate, max_iter)
+```
+
+
+
+```{r}
+# Plage des paramètres
+param_ranges <- list(a = c(min(params$a), max(params$a)), b = c(min(params$b), max(params$b)), c = c(min(params$c), max(params$c)))
+
+# Fonction pour initialiser aléatoirement les paramètres
+random_init <- function(param_ranges) {
+  list(
+    a = runif(1, param_ranges$a[1], param_ranges$a[2]),
+    b = runif(1, param_ranges$b[1], param_ranges$b[2]),
+    c = runif(1, param_ranges$c[1], param_ranges$c[2])
+  )
+}
+
+# Stocker les résultats des 5 tests
+results <- list()
+
+for (test in 1:5) {
+  cat("\n--- Test", test, "---\n")
+  
+  # Initialisation aléatoire
+  init_params <- random_init(param_ranges)
+  
+  # Ajuster les valeurs initiales dans la fonction
+  result <- sgd(
+    y_observe_list = y_observe_list,
+    U0_list = U0_list,
+    N = N,
+    learning_rate = learning_rate,
+    max_iter = max_iter
+  )
+  
+  # Stocker les résultats
+  results[[test]] <- list(
+    a_final = result$a,
+    b_final = result$b,
+    c_final = result$c,
+    cost_history = result$cost_history
+  )
+}
+
+```
+
+
+
+```{r}
+# Extraire les paramètres finaux pour chaque test
+a_vals <- sapply(results, function(res) res$a_final)
+b_vals <- sapply(results, function(res) res$b_final)
+c_vals <- sapply(results, function(res) res$c_final)
+
+# Fonction pour calculer les métriques
+compute_metrics <- function(values) {
+  mean_val <- mean(values)  # Moyenne
+  variance <- var(values)   # Variance
+  std_dev <- sd(values)     # Écart-type
+  
+  variance_relative <- variance / mean_val
+  std_dev_relative <- std_dev / mean_val
+  
+  list(
+    mean = round(mean_val,2),
+    variance_relative = variance_relative,
+    std_dev_relative = std_dev_relative
+  )
+}
+
+# Calculer les métriques pour chaque paramètre
+metrics_a <- compute_metrics(a_vals)
+metrics_b <- compute_metrics(b_vals)
+metrics_c <- compute_metrics(c_vals)
+
+```
+
+
+```{r}
+cbind(metrics_a,metrics_b,metrics_c)
+```
+
+### compute the accuracy of the model 
+#### The training dataset
+
+
+```{r}
+a_sgd<-2.09
+b_sgd<-1.09
+c_sgd<-0.28
+out_size<-40
+
+# Exemple d'utilisation
+# Matrices de valeurs réelles et prédites (par exemple 3 observations avec 2 variables)
+y_real_data_sgd <- do.call(rbind, lapply(Main_Training_Base$Un, function(x) unlist(x)))
+y_pred_data_sgd <- t(mapply( Generate_output ,out_size,a_sgd, b_sgd ,c_sgd, Main_Training_Base$U0))
+
+# Calcul du MAE global
+mae_train_sgd <- calculate_mae_per_row(y_real_data_sgd, y_pred_data_sgd)
+
+# Affichage du résultat
+print(paste("Le MAE Train sgd est :", mae_train_sgd))
+```
+
+### The test dataset ;
+```{r}
+# Exemple d'utilisation
+# Matrices de valeurs réelles et prédites (par exemple 3 observations avec 2 variables)
+y_real_test_sgd <- do.call(rbind, lapply(Main_Test_Base$Un, function(x) unlist(x)))
+y_pred_test_sgd <- t(mapply( Generate_output ,out_size,a_sgd, b_sgd ,c_sgd, Main_Test_Base$U0))
+
+# Calcul du MAE global
+mae_test_sgd <- calculate_mae_per_row(y_real_test_sgd, y_pred_test_sgd)
+
+# Affichage du résultat
+print(paste("Le MAE Test sgd est :", mae_test_sgd))
+```
+
+### Comparaison entre l'algorithme DIRECT et l'algorithme basé sur la méthode de descente de gradient (SGD)
+
+#### **DIRECT**
+L'algorithme **DIRECT** est un algorithme d'optimisation global qui explore systématiquement l'espace de recherche. Il est généralement plus robuste pour trouver des solutions optimales, indépendamment des conditions initiales, mais peut être plus coûteux en termes de calculs.
+
+#### **SGD (Stochastic Gradient Descent)**
+L'algorithme **SGD**, en revanche, utilise des mises à jour incrémentales basées sur le gradient. Il est plus rapide, mais peut être sensible aux choix des paramètres (comme le taux d'apprentissage) et peut se coincer dans des minima locaux.
+
+### **Comparaison des résultats**
+- **DIRECT** donne un meilleur résultat sur les données de test et d'entraînement avec un **MAE plus faible** :
+  - **MAE Train (DIRECT)** : 6.22
+  - **MAE Test (DIRECT)** : 6.45
+- **SGD** a un **MAE plus élevé** :
+  - **MAE Train (SGD)** : 22.19
+  - **MAE Test (SGD)** : 20.82
+
+### **Conclusion**
+- **DIRECT** semble plus approprié dans ce cas, car il donne de meilleurs résultats, en particulier pour des espaces de recherche complexes où les minima locaux peuvent poser problème.
+- **SGD** serait plus adapté pour des problèmes à grande échelle ou lorsqu'une bonne initialisation et un réglage précis du taux d'apprentissage sont possibles.
+
+
+# 4 Machine Learning approach
+## 4.1 Principle of the approach
+
+### 1. **Principe global du Machine Learning**
+Le **Machine Learning** (apprentissage automatique) consiste à utiliser des algorithmes pour permettre à un modèle de **s'apprendre** des **données** et d'améliorer ses performances sans être explicitement programmé. L'idée est d'entraîner un modèle avec des données d'exemples (données d'apprentissage) pour qu'il puisse ensuite faire des prédictions ou des classifications sur de nouvelles données. Il existe trois types principaux d'apprentissage : supervisé, non supervisé et par renforcement.
+
+### 2. **Intérêts et limites par rapport au couplage de modèles de données**
+**Intérêts du Machine Learning** :
+- **Adaptabilité** : Le Machine Learning peut s'adapter à des problèmes complexes sans nécessiter une compréhension complète des relations sous-jacentes.
+- **Automatisation** : Il permet d'automatiser la prise de décision en traitant de grandes quantités de données.
+
+**Limites par rapport au couplage de modèles** :
+- **Interprétabilité limitée** : Les modèles de Machine Learning, surtout les modèles complexes comme les réseaux de neurones, sont souvent des boîtes noires, difficiles à interpréter.
+- **Nécessité de données** : Ces modèles nécessitent de grandes quantités de données annotées pour entraîner les modèles efficacement.
+- **Manque de connaissance physique** : Le Machine Learning peut ne pas prendre en compte les lois physiques ou les connaissances spécifiques du domaine, contrairement au **DataModel Coupling**, qui modélise les relations physiques et peut être plus précis dans des contextes bien compris.
+
+### 3. **Fonctionnement d'un algorithme de réseau de neurones**
+Un **réseau de neurones** est une structure inspirée du cerveau humain qui comprend des **neurones artificiels** organisés en couches. Chaque neurone dans une couche prend des entrées, effectue une transformation (souvent une somme pondérée suivie d'une activation), et transmet le résultat à la couche suivante. L'algorithme ajuste les poids des connexions entre neurones pendant l'entraînement à l'aide d'une technique comme la descente de gradient, en cherchant à minimiser l'erreur entre les prédictions du modèle et les valeurs réelles.
+
+### 4. **Influence du nombre de neurones et de couches sur les résultats**
+- **Nombre de neurones** : Un nombre plus élevé de neurones dans chaque couche permet au réseau de capturer des relations plus complexes dans les données, mais peut aussi mener à un **sur-apprentissage** si le réseau devient trop complexe par rapport à la quantité de données.
+- **Nombre de couches** : Un plus grand nombre de couches (réseau profond) permet au modèle de capturer des relations de plus haut niveau et plus abstraites. Cependant, cela peut également rendre l'entraînement plus difficile, nécessitant des techniques avancées pour éviter le **problème de vanishing gradient** et garantir une bonne généralisation.
+
+
+### Build Data
+
+```{r}
+ML_data<-head(Main_Learning_Base,-3)
+Learn_data <- ML_data%>%
+  # Décomposer la liste Un en plusieurs lignes
+  unnest(Un) %>%
+  # Ajouter une nouvelle colonne avec le numéro de courbe
+  mutate(Ncurve = rep(1:nrow(ML_data), times = sapply(ML_data$Un, length))) %>%
+  # Ajouter l'indice n pour chaque élément dans Un
+  group_by(Ncurve) %>%
+  mutate(n = row_number()) %>%
+  ungroup() %>%
+  select(Ncurve, n, U0, TS = Un)
+```
+
+
+```{r}
+Ntrain<-0.3*100*41
+# Construire Train_Base_1 avec les 30% premières lignes
+Train_Base_1 <- Learn_data[1:Ntrain, ]
+Test_Base_1<-Learn_data[(Ntrain + 1):nrow(Learn_data) , ]
+```
+
+
+
+Le code de la question 3 crée une fonction de __normalisation__ pour les ensembles de données d'entraînement et de test __(TrainB et TestB)__. Il normalise les colonnes 2 à 4 de ces jeux de données en les __centrant__ et en les __réduisant__ par rapport à la moyenne et à l'étendue des données d'entraînement. Ensuite, les données normalisées sont extraites et les noms des colonnes sont définis pour les matrices résultantes.
+
+
+## Reseau neurone
+
+Le modèle que nous allons utiliser dans dans le code est un réseau de neurones artificiels (RNA) pour une tâche de régression.
+
+
+```{r}
+Train_Base_1_S <- Train_Base_1
+Train_Base_1_S[, c("n", "U0", "TS")] <- scale(Train_Base_1_S[, c("n", "U0", "TS")])
+Test_Base_1_S <- Test_Base_1
+Test_Base_1_S[, c("n", "U0", "TS")] <- scale(Test_Base_1_S[, c("n", "U0", "TS")])
+```
+
+```{r}
+library(neuralnet)
+
+# Assurez-vous que les données sont standardisées (vous l'avez déjà fait avec scale)
+set.seed(333)
+
+nc <- neuralnet(TS ~ n + U0,
+                data = Train_Base_1_S,
+                hidden = c(3, 6, 3),
+                err.fct = "sse",
+                linear.output = FALSE,
+                lifesign = 'full',
+                rep = 10,
+                algorithm = "rprop+",
+                stepmax = 700,
+                thresh = 0.001)  # Réduire le seuil de convergence
+
+# Résumé du modèle entraîné
+summary(nc)
+
+```
+
+
+
+Entrée (n, U0)
+        |
+  [Couche cachée 1] (3 neurones)
+        |
+  [Couche cachée 2] (6 neurones)
+        |
+  [Couche cachée 3] (3 neurones)
+        |
+   Sortie (TS)
+
+
+
+### Modèle de Réseau de Neurones : 3 Couches Cachées (3, 6, 3 Neurones)
+
+Le modèle ajuste un total de **58 paramètres**, répartis comme suit :
+
+#### Détails des Poids et Biais
+- **Poids** :
+  - 6 (entrée → 1ère couche)
+  - 18 (1ère → 2ème couche)
+  - 18 (2ème → 3ème couche)
+  - 3 (3ème → sortie)
+  - **Total des poids : 45**
+
+- **Biais** :
+  - 3 (1ère couche)
+  - 6 (2ème couche)
+  - 3 (3ème couche)
+  - 1 (sortie)
+  - **Total des biais : 13**
+
+#### Total des Paramètres
+- **45 Poids + 13 Biais = 58 Paramètres**
+
+---
+
+### Comparaison avec l'Approche Modèle-Données (Régression Linéaire)
+
+Dans un modèle de régression linéaire avec 2 variables explicatives (`n` et `U0`), le nombre de paramètres ajustés est beaucoup plus faible :
+- **Régression Linéaire** :
+  - 2 coefficients (pour `n` et `U0`)
+  - 1 biais (interception)
+  - **Total : 3 paramètres**
+
+---
+
+### Conclusion
+
+- Le **modèle de réseau de neurones** ajuste **58 paramètres**, ce qui est **beaucoup plus complexe** qu'une **régression linéaire** qui ajuste seulement **3 paramètres** ou la descente gradient.
+- Cette différence illustre la **flexibilité** et la **puissance** des réseaux de neurones pour capturer des relations non linéaires, mais aussi leur **complexité accrue**.
+
+
+## Exercise 4.3 Study of the fitted model
+
+
+```{r}
+library(ggplot2)
+t
+Train_Base_1_S$Predicted_TS <- predict(nc, newdata = Train_Base_1_S)
+Test_Base_1_S$Predicted_TS <- predict(nc, newdata = Test_Base_1_S)
+
+# Fonction pour tracer une courbe donnée
+plot_curve <- function(data, curve_id, title) {
+  data_filtered <- data[data$Ncurve == curve_id, ]
+  
+  ggplot(data_filtered, aes(x = n)) +
+    geom_line(aes(y = TS, color = "Initial Curve"), size = 1) +
+    geom_line(aes(y = Predicted_TS, color = "Predicted Curve"), linetype = "dashed", size = 1) +
+    labs(title = title, x = "n", y = "TS", color = "Legend") +
+    theme_minimal()
+}
+
+# Sélection de quelques courbes pour l'ensemble d'entraînement
+train_curves <- unique(Train_Base_1_S$Ncurve)[1:3]
+plots_train <- lapply(train_curves, function(curve_id) {
+  plot_curve(Train_Base_1_S, curve_id, paste("Train Curve ID:", curve_id))
+})
+
+# Sélection de quelques courbes pour l'ensemble de test
+test_curves <- unique(Test_Base_1_S$Ncurve)[1:3]
+plots_test <- lapply(test_curves, function(curve_id) {
+  plot_curve(Test_Base_1_S, curve_id, paste("Test Curve ID:", curve_id))
+})
+
+# Affichage des graphiques
+library(gridExtra)
+grid.arrange(grobs = plots_train, ncol = 2, top = "Training Curves")
+grid.arrange(grobs = plots_test, ncol = 2, top = "Test Curves")
+
+```
 
 
 
