@@ -1,11 +1,10 @@
 ---
-title: "Machine Learning et ADC"
+title: 'Yes'
 author: "Borice DOSSOU"
-date: "2024-09-04"
-output:
-  html_document: default
-  pdf_document: default
+date: "2024-12-08"
+output: html_document
 ---
+``
 
 ```{r}
 rm(list = ls())
@@ -14,6 +13,7 @@ rm(list = ls())
 # Chargement des library
 ```{r}
 library(ggplot2)
+library(tidyr)
 library(tidyverse)
 library(reshape2)
 library(dplyr)
@@ -22,9 +22,10 @@ library(RMySQL)
 library(jsonlite)
 library(nloptr)
 library(reticulate)
-library(keras3)
 library(tensorflow)
+library(keras3)
 library(gridExtra)
+
 ```
 
 
@@ -195,6 +196,7 @@ c_values <- seq(from = 0.1, to = 0.9, length.out = 5)
 U0_valeus<-seq(from = 1, to = 5, length.out = 5)
 # Créer une grille de combinaisons possibles des paramètres
 param_grid <- expand.grid(a = a_values, b = b_values, c = c_values, U0=U0_valeus)
+
 ```
 
 
@@ -1499,7 +1501,7 @@ Le code de la question 3 crée une fonction de __normalisation__ pour les ensemb
 p<-2 # le nombre d'inputs 
 # Créer le modèle séquentiel
 model <- keras_model_sequential() %>%
-  layer_dense(units = 3, activation = "relu",input_shape = c(p)) %>%
+  layer_dense(units = 3, activation = "relu",input_shape = p) %>%
   layer_dense(units = 6, activation = "relu") %>%
   layer_dense(units = 3, activation = "relu") %>%
   layer_dense(units = 1, activation = "linear") 
